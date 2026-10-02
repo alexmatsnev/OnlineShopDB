@@ -1,0 +1,22 @@
+# Local secrets and environment files
+.env
+*.pgpass
+pgpass.conf
+
+# Database dumps and backups
+*.dump
+*.backup
+*.bak
+
+# Editor / OS files
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+bin/
+obj/
