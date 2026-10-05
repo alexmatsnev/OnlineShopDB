@@ -184,6 +184,15 @@ WHERE EXISTS (
       AND p.name ILIKE '%headphones%'
 );
 
+-- less preferred way to query "customers who have at least one..."
+-- WHERE EXISTS states the intent directly and can't produce duplicates
+SELECT DISTINCT c.first_name, c.last_name
+FROM customers AS c
+JOIN orders      AS o  ON o.customer_id = c.customer_id
+JOIN order_items AS oi ON oi.order_id   = o.order_id
+JOIN products    AS p  ON p.product_id  = oi.product_id
+WHERE p.name ILIKE '%headphones%';
+
 
 -- ---------------------------------------------------------
 -- 7. LATERAL: a subquery per row
@@ -204,15 +213,99 @@ ORDER BY c.customer_id;
 
 
 -- =========================================================
--- Exercises (try on your own)
+-- Exercises
 -- =========================================================
 -- E1. List all order lines of order 5 with product name, quantity
 --     and line total.
+SELECT oi.order_id,
+       p.name,
+       oi.quantity,
+       oi.quantity * oi.unit_price AS line_total
+FROM order_items AS oi
+JOIN products AS p ON p.product_id = oi.product_id
+WHERE oi.order_id = 5
+ORDER BY line_total;
+
 -- E2. Show every product with the IDs of the orders it appears in,
 --     including products never ordered (hint: LEFT JOIN).
+SELECT p.product_id, p.name, oi.order_id
+FROM products AS p
+LEFT JOIN order_items AS oi ON oi.product_id = p.product_id
+ORDER BY p.product_id, oi.order_id ASC;
+
+-- aggregated version with one row per product with all its order IDs
+SELECT p.product_id,
+       p.name,
+       string_agg(oi.order_id::text, ', ' ORDER BY oi.order_id) AS order_ids
+FROM products AS p
+LEFT JOIN order_items AS oi ON oi.product_id = p.product_id
+GROUP BY p.product_id, p.name
+ORDER BY p.product_id;
+
 -- E3. Find customers who have a 'cancelled' order.
+-- SELECT DISTINCT version if we also need orders
+SELECT DISTINCT c.customer_id,
+       			c.first_name || ' ' || c.last_name AS customer,
+       			o.order_id
+FROM customers AS c
+INNER JOIN orders AS o ON o.customer_id = c.customer_id
+WHERE o.status = 'cancelled'
+ORDER BY c.customer_id, o.order_id;
+
+-- EXISTS version, better if we only need customers
+SELECT c.customer_id,
+       c.first_name || ' ' || c.last_name AS customer
+FROM customers AS c
+WHERE EXISTS (
+	SELECT 1 FROM orders AS o
+	WHERE o.customer_id = c.customer_id
+	  AND o.status = 'cancelled'
+)
+ORDER BY c.customer_id;
+
 -- E4. Find customers who never bought anything costing more than
 --     50 000 per unit (hint: NOT EXISTS).
+SELECT c.customer_id,
+       c.first_name || ' ' || c.last_name AS customer
+FROM customers AS c
+WHERE NOT EXISTS (
+	SELECT 1
+	FROM order_items AS oi
+	INNER JOIN orders AS o ON o.order_id = oi.order_id
+	WHERE o.customer_id = c.customer_id
+	  AND o.status <> 'cancelled'   -- checking only real purchases
+	  AND oi.unit_price > 50000
+) AND EXISTS (   -- to cut customers who never bought anything
+	SELECT 1
+	FROM orders AS o
+	WHERE o.customer_id = c.customer_id
+      AND o.status <> 'cancelled'
+)
+ORDER BY c.customer_id;
+
 -- E5. For each customer, show their FIRST order (hint: LATERAL).
+SELECT c.customer_id,
+       c.first_name || ' ' || c.last_name AS customer,
+	   fo.order_id,
+	   fo.order_date,
+	   fo.status
+FROM customers AS c
+LEFT JOIN LATERAL (
+	SELECT o.order_id, o.order_date, o.status
+	FROM orders AS o
+	WHERE o.customer_id = c.customer_id
+	  AND o.status <> 'cancelled'
+	ORDER BY o.order_date
+	LIMIT 1
+) AS fo ON true
+ORDER BY c.customer_id;
+
 -- E6. List orders shipped to an address different from the
 --     customer's own address.
+SELECT o.order_id,
+	   o.shipping_address,
+       c.address AS customer_address
+FROM orders AS o
+INNER JOIN customers AS c ON c.customer_id = o.customer_id
+WHERE c.address IS DISTINCT FROM o.shipping_address
+ORDER BY o.order_id;
