@@ -82,7 +82,7 @@ WHERE name LIKE 'USB%';
 
 -- 2.8 Case-insensitive pattern with ILIKE (PostgreSQL extension)
 SELECT name FROM products
-WHERE name ILIKE '%mouse%';
+WHERE name ILIKE '%mouse%';   -- insensitive like
 
 -- 2.9 Missing values: NULL is checked with IS NULL, never with = NULL
 SELECT first_name, last_name, phone
@@ -179,7 +179,7 @@ SELECT upper(last_name)  AS last_name_upper,
 FROM customers;
 
 -- 4.6 City = the part of the address before the first comma
-SELECT first_name, last_name,
+SELECT first_name, last_name, 
        split_part(address, ',', 1) AS city
 FROM customers;
 
@@ -206,13 +206,55 @@ FROM products;
 
 
 -- =========================================================
--- Exercises (try on your own)
+-- Exercises
 -- =========================================================
 -- E1. List customers registered in 2026-03 or later, newest first.
+SELECT first_name, last_name,
+       created_at::date AS registered
+FROM customers
+WHERE created_at >= '2026-03-01 00:00+05'
+ORDER BY created_at DESC;
+
 -- E2. Find products whose description mentions 'USB' (any case).
+SELECT *
+FROM products
+WHERE description ILIKE '%USB%';   -- ILIKE is a PostgreSQL extension
+
+SELECT *
+FROM products
+WHERE lower(description) LIKE '%usb%';   -- the standard-SQL way
+
 -- E3. Show the 3 cheapest products that are in stock.
+SELECT *
+FROM products
+WHERE stock_quantity > 0
+ORDER BY price, product_id
+LIMIT 3;
+
 -- E4. List all cities where customers live, each city once.
+SELECT DISTINCT split_part(address, ',', 1) AS city,
+                count(*) AS customers
+FROM customers
+WHERE address IS NOT NULL
+GROUP BY city
+ORDER BY city;
+
 -- E5. Show orders that are not cancelled and were placed before
 --     2026-05-01, sorted by date.
+SELECT *
+FROM orders
+WHERE status <> 'cancelled'
+  AND order_date < '2026-05-01 00:00+05'
+ORDER BY order_date;
+
+SELECT *
+FROM orders
+WHERE status IS DISTINCT FROM 'cancelled'   -- to keep the NULL rows
+  AND order_date < '2026-05-01 00:00+05'
+ORDER BY order_date;
+
 -- E6. For each product, show its name and a column 'discount_price'
 --     that is 10% lower than price, rounded to tens.
+SELECT name, price, round(price * 0.9, -1) AS discount_price
+FROM products
+ORDER BY price, product_id;
