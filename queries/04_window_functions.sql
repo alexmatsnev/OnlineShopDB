@@ -13,6 +13,7 @@
 -- ---------------------------------------------------------
 
 -- 1.1 GROUP BY: one row per customer
+-- how many different customers made orders
 SELECT customer_id, count(*) AS orders
 FROM orders
 GROUP BY customer_id
@@ -292,7 +293,48 @@ ORDER BY month;
 -- =========================================================
 -- E1. For each product, show its price, the average price of all
 --     products, and the difference between them.
+WITH with_avg AS (
+    SELECT product_id,
+           name,
+           price,
+           avg(price) OVER () AS avg_price
+    FROM products
+)
+SELECT product_id,
+       name,
+       price,
+       round(avg_price, 2)                                AS average_price,
+       round(price - avg_price, 2)                        AS price_difference,
+       round(100.0 * (price - avg_price) / avg_price, 1)  AS difference_percent
+FROM with_avg
+ORDER BY product_id;
+
+-- without window function
+WITH avg_price AS (
+    SELECT avg(price) AS value
+    FROM products
+)
+SELECT p.product_id,
+       p.name,
+       p.price,
+       round(a.value, 2)                                AS average_price,
+       round(p.price - a.value, 2)                      AS price_difference,
+       round(100.0 * (p.price - a.value) / a.value, 1)  AS difference_percent
+FROM products AS p
+CROSS JOIN avg_price AS a
+ORDER BY p.product_id;
+
 -- E2. Number each customer's orders 1, 2, 3, ... in date order.
+-- using row_number()+tied break (order_id) cuz we need unique positions
+-- rank() and dense_rank() should be used when tied values should share a place
+SELECT customer_id,
+       order_id,
+       order_date,
+       row_number() OVER (PARTITION BY customer_id
+                          ORDER BY order_date, order_id) AS order_number
+FROM orders
+ORDER BY customer_id, order_number;
+
 -- E3. For each product, show its rank by revenue (dense_rank), and
 --     list only products in the top 3 ranks.
 -- E4. Find the most expensive product in each price level
