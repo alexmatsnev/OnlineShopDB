@@ -337,9 +337,87 @@ ORDER BY customer_id, order_number;
 
 -- E3. For each product, show its rank by revenue (dense_rank), and
 --     list only products in the top 3 ranks.
+-- first we need to calculate revenue for each product and group by result
+WITH product_revenue AS (
+    SELECT p.product_id,
+           p.name,
+           p.price,
+           sum(oi.quantity)                 AS sold_items,
+           sum(oi.quantity * oi.unit_price) AS revenue
+    FROM products AS p
+    INNER JOIN order_items AS oi USING (product_id)
+    INNER JOIN orders      AS o  USING (order_id)
+    WHERE o.status <> 'cancelled'
+    GROUP BY p.product_id, p.name, p.price
+),
+-- ssecond we need to rank the result according to revenue
+ranked AS (
+    SELECT product_id,
+           name,
+           price,
+           sold_items,
+           revenue,
+           dense_rank() OVER (ORDER BY revenue DESC) AS revenue_rank
+    FROM product_revenue
+)
+-- third we need to filter by rank in WHERE clause
+SELECT *
+FROM ranked
+WHERE revenue_rank <= 3
+ORDER BY revenue_rank, product_id;
+
 -- E4. Find the most expensive product in each price level
 --     ('budget' < 10 000, 'mid-range' < 50 000, else 'premium').
+WITH leveled AS (
+    SELECT product_id,
+           name,
+           price,
+           CASE
+               WHEN price < 10000 THEN 'budget'
+               WHEN price < 50000 THEN 'mid-range'
+               ELSE 'premium'
+           END AS price_level
+    FROM products
+),
+ranked AS (
+    SELECT product_id,
+           name,
+           price,
+           price_level,
+           row_number() OVER (PARTITION BY price_level
+                              ORDER BY price DESC, product_id) AS rn
+    FROM leveled
+)
+SELECT price_level, product_id, name, price
+FROM ranked
+WHERE rn = 1
+ORDER BY price;
+
 -- E5. Show the cumulative number of registered customers over time,
 --     one row per customer, ordered by registration date.
+-- sorted by created_at forces the count to increase at each individual registration
+-- sorted by created_at::date gives "customers as of the end of each day"
+SELECT customer_id,
+	   created_at::date AS registered_on,
+	   row_number() OVER (ORDER BY created_at, customer_id) AS number_of_customers
+FROM customers
+ORDER BY created_at, customer_id ASC;
+
 -- E6. For each order, show its total and the total of the same
 --     customer's previous order.
+WITH orders_total AS (
+	SELECT order_id,
+		   sum(quantity * unit_price) AS total
+	FROM order_items
+	GROUP BY order_id
+)
+SELECT o.customer_id,
+	   o.order_id,
+	   ot.total AS order_total,
+	   lag(ot.total) OVER (PARTITION BY o.customer_id
+	   					   ORDER BY o.order_date, o.order_id) AS previous_total,
+	   ot.total - lag(ot.total) OVER (PARTITION BY o.customer_id
+	   					   			  ORDER BY o.order_date, o.order_id) AS delta_total
+FROM orders AS o
+LEFT JOIN orders_total AS ot USING (order_id)
+ORDER BY o.customer_id, o.order_date;
