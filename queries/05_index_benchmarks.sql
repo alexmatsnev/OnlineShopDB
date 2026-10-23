@@ -118,39 +118,48 @@ WHERE email = 'customer500@example.com';
 -- because EXECUTE plans the query every time.
 -- =========================================================
 
+
 \echo
 \echo '=== 2. Average execution time (200 runs each) ==='
 
-SELECT pg_temp.bench('order_date one month    | with index',
-    $q$SELECT * FROM orders
-       WHERE order_date >= '2026-05-01 00:00+05'
-         AND order_date <  '2026-06-01 00:00+05'$q$);
+-- using PERFORM instead off SELECT avoids output of empty row
+-- from calling a void function with SELECT
+DO $$ BEGIN
+    PERFORM pg_temp.bench('order_date one month    | with index',
+        $q$SELECT * FROM orders
+           WHERE order_date >= '2026-05-01 00:00+05'
+             AND order_date <  '2026-06-01 00:00+05'$q$);
 
-SELECT pg_temp.bench('order_date latest 10    | with index',
-    $q$SELECT * FROM orders ORDER BY order_date DESC LIMIT 10$q$);
+    PERFORM pg_temp.bench('order_date latest 10    | with index',
+        $q$SELECT * FROM orders ORDER BY order_date DESC LIMIT 10$q$);
 
-SELECT pg_temp.bench('lower(email) lookup     | with index',
-    $q$SELECT * FROM customers
-       WHERE lower(email) = lower('Customer500@Example.com')$q$);
+    PERFORM pg_temp.bench('lower(email) lookup     | with index',
+        $q$SELECT * FROM customers
+           WHERE lower(email) = lower('Customer500@Example.com')$q$);
+END $$;
 
 BEGIN;
 DROP INDEX idx_orders_order_date;
 
-SELECT pg_temp.bench('order_date one month    | WITHOUT index',
-    $q$SELECT * FROM orders
-       WHERE order_date >= '2026-05-01 00:00+05'
-         AND order_date <  '2026-06-01 00:00+05'$q$);
+DO $$ BEGIN
+    PERFORM pg_temp.bench('order_date one month    | WITHOUT index',
+        $q$SELECT * FROM orders
+           WHERE order_date >= '2026-05-01 00:00+05'
+             AND order_date <  '2026-06-01 00:00+05'$q$);
 
-SELECT pg_temp.bench('order_date latest 10    | WITHOUT index',
-    $q$SELECT * FROM orders ORDER BY order_date DESC LIMIT 10$q$);
+    PERFORM pg_temp.bench('order_date latest 10    | WITHOUT index',
+        $q$SELECT * FROM orders ORDER BY order_date DESC LIMIT 10$q$);
+END $$;
 ROLLBACK;
 
 BEGIN;
 DROP INDEX uq_customers_email_lower;
 
-SELECT pg_temp.bench('lower(email) lookup     | WITHOUT index',
-    $q$SELECT * FROM customers
-       WHERE lower(email) = lower('Customer500@Example.com')$q$);
+DO $$ BEGIN
+    PERFORM pg_temp.bench('lower(email) lookup     | WITHOUT index',
+        $q$SELECT * FROM customers
+           WHERE lower(email) = lower('Customer500@Example.com')$q$);
+END $$;
 ROLLBACK;
 
 
